@@ -1,0 +1,3 @@
+[rsync]
+remote = snowserver.colorado.edu:~/git-fat-store
+sshuser = dosc3612
