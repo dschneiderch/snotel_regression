@@ -6,10 +6,7 @@ library(stats)
 library(matlab)
 library(reshape2)
 # Read snotel, recon, phv data from matlab output.
-setwd('~/Documents/R/snotel_regression')
-
 data=readMat('~/Documents/MATLAB/recon_sntl_alldays/swe_phv_snotel_matrices.mat')
-
 
 ## PHV DATAFRAME
 phvrec=data[[1]]
@@ -17,7 +14,7 @@ phvrec=data[[1]]
 colnames(phvrec)=c('Lat','Long','Elev','Eastness','Northness','Slope','RegionalSlope','RegionalEastness','RegionalNorthness','FtprtW','Wbdiff','NWbdiff','SWbdiff','Wd2ocean','NWd2ocean','SWd2ocean')
 phvrec=as.data.frame(phvrec)
 
-
+setwd('~/Documents/R/import.process.matlabdata')
 #get attribute data from binary matlab files.
 sitenames=readMat('snotel_attributes/sitenames.mat')
 sn=as.character(sitenames[[1]])
@@ -34,9 +31,10 @@ sid=as.character(stationid[[1]])
 #
 snotelatt=data.frame(sn,sid,ss,slt,sln)
 
+
+setwd('~/Documents/R/snotel_regression')
 ## SNOTEL DATAFRAME
-datevec=as.Date('1999-10-1'):as.Date('2012-09-30')
-class(datevec) <- 'Date'
+datevec=seq(as.POSIXct('1999-10-1 00:00:00',tz='MST'),as.POSIXct('2012-09-30 00:00:00',tz='MST'),by='day')
 sntlrec=data[[2]]
 colnames(sntlrec) <- sid
 snotelrec=as.data.frame(sntlrec)
@@ -49,8 +47,7 @@ snotelrec$state=rep(ss,each=length(datevec))
 snotelrec$station=rep(sn,each=length(datevec))
 
 ## RECON DATAFRAME
-datevec=as.Date('1999-10-1'):as.Date('2013-09-30')
-class(datevec) <- 'Date'
+datevec=seq(as.POSIXct('1999-10-1 00:00:00',tz='MST'),as.POSIXct('2013-09-30 00:00:00',tz='MST'),by='day')
 rcnrec=data[[3]]
 colnames(rcnrec) <- sid
 reconrec=as.data.frame(rcnrec)
@@ -64,7 +61,7 @@ reconrec$station=rep(sn,each=length(datevec))
 
 
 ## COMBINED SWE SPATIAL DATAFRAME
-swe=subset(reconrec,date<'2012-10-1')
+swe=subset(reconrec,date<as.POSIXct('2012-10-1',tz='MST'))
 colnames(swe) <- c('date','stationid','recon','lat','long','state','station')
 swe$snotel=snotelrec$swe.m
 coordinates(swe)=~long+lat
@@ -74,7 +71,7 @@ save(list=c('phvrec','swe','reconrec','snotelrec'),file='~/Documents/R/snotel_re
 
 ### Get UCO domain terrain variables
 ### LOAD UCO TERRAIN VARIABLES
-uco_phv=readMat('uco_variables_MASTER.mat')
+uco_phv=readMat('~/Documents/R/import.process.matlabdata/uco_variables_MASTER.mat')
 names(uco_phv)=c('Lat','Long','RegionalSlope','RegionalAspect','FtprtW','Wbdiff','NWbdiff','SWbdiff','Wd2ocean','Waz','NWd2ocean','NWaz','SWd2ocean','SWaz','Aspect','Slope','Elev')
 ### Stack each variable
 Lat=raster(uco_phv$Lat,xmn=-112.25,xmx=-104.125,ymn=33,ymx=43.75)
@@ -103,8 +100,8 @@ for (i in seq(2,length(uco_phv))){
 }
 ucophv=as.data.frame(ucophv)
 colnames(ucophv)=c('Lat','Long','RegionalSlope','RegionalEastness','FtprtW','Wbdiff','NWbdiff','SWbdiff','Wd2ocean','Waz','NWd2ocean','NWaz','SWd2ocean','SWaz','Eastness','Slope','Elev')
-ucophv$RegionalNorthness=sin(acos(ucophv$RegionalEastness))
-ucophv$Northness=sin(acos(ucophv$Eastness))
+ucophv$RegionalNorthness=sin(ucophv$RegionalSlope)*ucophv$RegionalEastness
+ucophv$Northness=sin(ucophv$Slope)*ucophv$Eastness
 str(ucophv)
 
 save(file='ucophv.RData',list=c('ucophv','ucophv.stack'))
