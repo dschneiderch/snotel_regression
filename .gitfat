@@ -1,3 +1,0 @@
-[rsync]
-remote = snowserver.colorado.edu:~
-sshuser = dosc3612

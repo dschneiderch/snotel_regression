@@ -1,2 +1,0 @@
-*.tif filter=fat -crlf
-*.RData filter=fat -crlf
