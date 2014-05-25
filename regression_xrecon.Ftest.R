@@ -1,16 +1,14 @@
 ##############################
 setwd('~/Documents/R/snotel_regression')
-library(gstat)
 library(sp)
 library(spdep)
 library(raster)
 library(ggplot2)
-library(MASS)
+library(DMwR)
 library(R.matlab)
+library(lubridate)
 
-load('~/Documents/R/import.process.matlabdata/snoteldata.RData')
-swe=cbind(swe,phvrec)
-swe$mth=factor(swe$mth,c('Mar','Apr','May'))
+load('~/Documents/R/snotel_regression/snoteldata.RData')
 
 sitecoords=readMat('~/Documents/R/import.process.matlabdata/snotel_attributes/sitecoords.mat')
 slt=sitecoords[[1]][,1]
@@ -19,7 +17,7 @@ snotel.locs=data.frame(lat=slt,long=sln)
 coordinates(snotel.locs)<- ~long+lat
 proj4string(snotel.locs) <- '+proj=longlat +datum=WGS84'
 
-load('ucophv.stack.RData')
+load('ucophv.RData')
 #ucophv.stack.scaled=ucophv.stack
 #m=cellStats(ucophv.stack,'mean')
 #stdev=cellStats(ucophv.stack,'sd')
@@ -40,58 +38,78 @@ lim=c(lon.low, lon.high, lat.low, lat.high)
 ##
 
  ## REGRESSION AND STEPAIC
-load('snotel_regression/recon.v2.stack.RData')
 mdl.stepaic.phv=list()
 mdl.wrecon=list()
 mdl.predict=list()
 pr.phvrcn.surface.stack=list()
 pr.phv.surface.stack=list()
 rcn.sig.phv=list()
-# ## ## Read in all recon images and create rasterstack
-# recon.v2.stack=stack()
-# rv='v2.senlat.nldas.usace.no_canopy_windcorr'         
-#  yr=2000
-#  mth='Mar'
-#  for (yr in seq(2000,2011)){
-#       for (mth in c('MAR','APR','MAY')){
-#            snodis_geotiffs=paste('/Volumes/WSC/SWE_SNODIS/recon/',rv,'/UpperColoradoRiver/',yr,'/tif',sep='')
-#            ### Get current recon
-#            im.string=paste(snodis_geotiffs,'/','01',toupper(mth),yr,'.tif',sep='')
-#            r=raster(im.string,crs='+proj=longlat +datum=NAD83')
-#            names(r)='recon'
-#            recon.v2.stack=addLayer(recon.v2.stack,r)
-#       }
-# }
-# 
-# ## ## print(str(recon.v2.stack))
-#  recon.v2.stack.scaled=recon.v2.stack
-#  m=cellStats(recon.v2.stack,'mean')
-#  stdev=cellStats(recon.v2.stack,'sd')
-#  for(i in 1:nlayers(recon.v2.stack)){
-#      recon.v2.stack.scaled[[i]]=(recon.v2.stack[[i]]-m[i])/stdev[i]
-#  }
-## print(str(recon.v2.stack.scaled))
+
+load('recon.v2.stack.RData')
+
+## ## Read in all recon images and create rasterstack
+## recon.v2.stack=stack()
+## rv='v2.senlat.nldas.usace.no_canopy_windcorr'         
+##  yr=2000
+## j=1
+##  for (yr in seq(2000,2011)){
+##     rswe_maxdoy=as.numeric(strftime(strptime(paste(yr,'0301'),format='%Y%m%d',tz='MST'),'%j'))
+##     rswe_enddoy=as.numeric(strftime(strptime(paste(yr,'0831'),format='%Y%m%d',tz='MST'),'%j'))
+##  for (dofy in seq(rswe_maxdoy,rswe_enddoy)){ 
+##         print(paste0('iteration ',yr,' ',dofy,': '))
+##         snodis_geotiffs=paste('/Volumes/WSC/SWE_SNODIS/recon/',rv,'/UpperColoradoRiver/',yr,'/swe_tif',sep='')
+## ### Get current recon
+##         getdoy=sprintf("%003d",dofy)
+##         wdt=strftime(as.POSIXct(paste0(getdoy,yr),'%j%Y',tz='MST'),'%d%b%Y',tz='MST')
+##         im.string=paste(snodis_geotiffs,'/',toupper(wdt),'.tif',sep='')
+##         r=raster(im.string,crs='+proj=longlat +datum=NAD83')
+##         names(r)=toupper(wdt)
+##         ## names(recon.v2.stack[[j]])=toupper(wdt)
+##         recon.v2.stack=addLayer(recon.v2.stack,r)
+##         j=j+1
+##     }
+## }
+#
+## Scale values in space and save to a file.
+##  recon.v2.stack.scaled=recon.v2.stack
+##  m=cellStats(recon.v2.stack,'mean')
+##  stdev=cellStats(recon.v2.stack,'sd')
+##  for(i in 1:nlayers(recon.v2.stack)){
+##      recon.v2.stack.scaled[[i]]=(recon.v2.stack[[i]]-m[i])/stdev[i]
+##  }
+## ## print(str(recon.v2.stack.scaled))
+## save(file='recon.v2.stack.RData',list=c('recon.v2.stack'))#,'recon.v2.stack.scaled'))
+
+
+
 
 #scale the x variables.
-swe.sc=as.data.frame(scale(swe[,c('Latitude','Longitude','Elev','Aspect','Slope','RegionalSlope','RegionalAspect','FtprtW','Wbdiff','NWbdiff','SWbdiff','Wd2ocean','NWd2ocean','SWd2ocean')]))
-swe.sc=cbind(swe.sc,snotel=swe$snotel,mth=swe$mth,yr=swe$yr,date=swe$date)
-## print(str(swe.sc))
+phv_scatt=scale(phvrec)
+phvrec.sc=as.data.frame(phv_scatt)
+swe=data.frame(swe)
+swe$doy=as.numeric(strftime(swe$date,'%j'))
 
 samplesize=NULL
-j=1
-j2=1
 yr=2000
-mth='Mar'
 for (yr in seq(2000,2011)){
-     for (mth in c('Mar','Apr','May')){ 
-          print(paste('iteration - ',j,': ',mth,yr,sep=''))
+    rswe_maxdoy=as.numeric(strftime(strptime(paste(yr,'0301'),format='%Y%m%d',tz='MST'),'%j'))
+    rswe_enddoy=as.numeric(strftime(strptime(paste(yr,'0831'),format='%Y%m%d',tz='MST'),'%j'))
+    for (dofy in seq(rswe_maxdoy,rswe_enddoy){ 
+        print(paste0('iteration - ',yr,' ',dofy,': '))
+        
+        swesub=subset(swe,doy==dofy & year(date)==yr)
+        
+        snotel_scatt=scale(swesub$snotel)
+        swesub$snotel=snotel_scatt
+        swe2model=cbind(swesub,phvrec.sc)
+        z2keep=which(swe2model$snotel>0)
+        if(length(z2keep)==0){
+            next
+        }
+        swe2model=swe2model[z2keep,]
+        ## samplesize[j]=nrow(swe2model)
+        ## swe2model$snotel[swe2model$snotel==0]=0.0001
 
-          swe2model=swe.sc[toupper(swe.sc$mth)==toupper(mth) & swe.sc$yr==yr,]
-          ## z2keep=which(swe2model$snotel>0)
-          ## swe2model=swe2model[z2keep,]
-          ## samplesize[j]=nrow(swe2model)
-          swe2model$snotel[swe2model$snotel==0]=0.0001
-          snotel.sc=scale(swe2model$snotel)
           ## N=nrow(swe2model)
           ## swe2model$snotel=swe2model$snotel+runif(N,0.001,0.002)
 
@@ -107,79 +125,74 @@ for (yr in seq(2000,2011)){
           ## dev.off()
 
           
-          mdl.stepaic.phv[[j]]=list()
+          mdl.stepaic.phv=list()
           mdl.wrecon[[j]]=list()
           mdl.predict[[j]]=list()
           pr.phv.surface.stack[[j]]=stack()
           pr.phvrcn.surface.stack[[j]]=stack()
-          rcn.sig.phv[[j]]=list()
+          rcn.sig.phv=matrix(NA,nrow=12,ncol=12)
           sr=list()
           ### Base model         
           ## start.param=fitdistr(swe2model$snotel,'gamma')
-          mdl=glm(snotel~Latitude + Longitude+Elev+Aspect+Slope+RegionalSlope+RegionalAspect+FtprtW+Wbdiff+NWbdiff+SWbdiff+Wd2ocean+NWd2ocean+SWd2ocean,family=gaussian,data=swe2model)
-          for (ryr in seq(2000,2011)){
-              print(paste('ryr = ',ryr))
-              print(paste('j2 = ',j2))
-              r=recon.v2.stack.scaled[[j2]]
-              names(r)='recon'
-              var.stack=addLayer(ucophv.stack.scaled,r)
-              site.recon=as.numeric(raster::extract(r,snotel.locs))
-              swe2model$recon=site.recon#[z2keep]
+          mdl=glm(snotel~Lat + Long+Elev+Eastness+Northness+Slope+RegionalSlope+RegionalEastness+RegionalNorthness+FtprtW+Wbdiff+NWbdiff+SWbdiff+Wd2ocean+NWd2ocean+SWd2ocean,family=gaussian,data=swe2model)
 
-             
+        for (ryr in seq(2000,2011)){
+            print(paste('ryr = ',ryr))
+            rswe_maxdoy=as.numeric(strftime(strptime(paste(ryr,'0301'),format='%Y%m%d',tz='MST'),'%j'))
+            rswemax=subset(swe[,'recon'],year(swe$date)==ryr & swe$doy==rswe_maxdoy)
+            rswemax.sc=scale(rswemax)
+            
+            if(dofy < rswe_maxdoy){
+                siterecon=rswemax.sc
+            } else {
+                siterecon=subset(swe$recon,swe$doy==dofy & year(swe$date)==ryr)
+            }
+            swe2model$recon=siterecon[z2keep]
+                              
 ### Reduce with stepaic
-              ## PHV only
-              if(ryr==2000){
-                  mdl.stepaic.phv[[j]][[ryr-1999]]=stepAIC(mdl, scope=list(upper= ~ Latitude + Longitude + Elev+ Aspect + Slope + RegionalSlope + RegionalAspect + FtprtW + Wbdiff + NWbdiff + SWbdiff + Wd2ocean + NWd2ocean + SWd2ocean, lower=~1), direction='both',trace=F,k=log(nrow(swe2model)))
-              } else {
-                  mdl.stepaic.phv[[j]][[ryr-1999]]=mdl.stepaic.phv[[j]][[1]]
-              }
-
-              
+            ## PHV only
+            if(ryr==2000){
+                mdl.stepaic.phv[[j]]=stepAIC(mdl, scope=list(upper= ~ Lat + Long + Elev+ Eastness + Northness + Slope + RegionalSlope + RegionalEastness + RegionalNorthness + FtprtW + Wbdiff + NWbdiff + SWbdiff + Wd2ocean + NWd2ocean + SWd2ocean, lower=~1), direction='both',trace=F,k=log(nrow(swe2model)))
+            } 
+            
+            
 ### Reduce with stepaic
-              ## PHV and RECON
-              newformula=paste(mdl$formula[2],mdl$formula[1],mdl.stepaic.phv[[j]][[ryr-1999]]$formula[3],'+ recon',sep=' ')
-              print(newformula)
-              
-              mdl.wrecon[[j]][[ryr-1999]]=glm(newformula,data=swe2model,family=gaussian)
-
-              mdl.anova=anova(mdl.stepaic.phv[[j]][[ryr-1999]],mdl.wrecon[[j]][[ryr-1999]],test='F')
-
-
+            ## PHV and RECON
+            newformula=paste(mdl$formula[2],mdl$formula[1],mdl.stepaic.phv[[j]]$formula[3],'+ recon',sep=' ')
+            print(newformula)
+            
+            mdl.wrecon[[j]][[ryr-1999]]=glm(newformula,data=swe2model,family=gaussian)
+            mdl.anova=anova(mdl.stepaic.phv[[j]],mdl.wrecon[[j]][[ryr-1999]],test='F')
               
 ### Predict surface from regression
-
               if(mdl.anova$P[2]<0.05){
-                  rcn.sig.phv[[j]][[ryr-1999]]=1
+                  rcn.sig.phv[j,ryr-1999]=1
               } else {
-                  rcn.sig.phv[[j]][[ryr-1999]]=0
+                  rcn.sig.phv[j,ryr-1999]=0
               }
 
-          #PHV and RECON surface
-                  pr.phvrcn.surface=predict(var.stack,mdl.wrecon[[j]][[ryr-1999]],type='response')
-                  pr.phvrcn.surface[r==0]=0
-                  ## pr.surface=pr.surface*attr(snotel.sc,'scaled:scale')+attr(snotel.sc,'scaled:center')
-                  pr.phvrcn.surface[pr.phvrcn.surface<0]=0
-                  projection(pr.phvrcn.surface)='+proj=longlat +datum=NAD83'
-                  pr.phvrcn.surface.stack[[j]]=addLayer(pr.phvrcn.surface.stack[[j]],pr.phvrcn.surface)
 
-          #PHV only surface #[[-nlayers(var.stack)]]
-                  pr.phv.surface=predict(var.stack,mdl.stepaic.phv[[j]][[ryr-1999]],type='response')
-                  pr.phv.surface[r==0]=0
-                  ## pr.surface=pr.surface*attr(snotel.sc,'scaled:scale')+attr(snotel.sc,'scaled:center')
-                  pr.phv.surface[pr.phv.surface<0]=0
-                  projection(pr.phv.surface)='+proj=longlat +datum=NAD83'
-                  pr.phv.surface.stack[[j]]=addLayer(pr.phv.surface.stack[[j]],pr.phv.surface)
-              
+#PHV only surface #[[-nlayers(var.stack)]]
+            r=recon.v2.stack[[yr-1999]]#using this to mask so use yr of simulation
+            var.stack=ucophv.stack
+            pr.phv.surface=predict(var.stack,mdl.stepaic.phv[[j]][[ryr-1999]],type='response')
+            pr.phv.surface[r==0]=0
+            pr.surface=pr.surface*attr(swe2model$snotel,'scaled:scale')+attr(swe2model$snotel,'scaled:center')
 
-
-              j2=j2+3
-
+            pr.phv.surface[pr.phv.surface<0]=0
+            projection(pr.phv.surface)='+proj=longlat +datum=NAD83'
+            pr.phv.surface.stack[[j]]=addLayer(pr.phv.surface.stack[[j]],pr.phv.surface)
+            
+#PHV and RECON surface
+            var.stack=stack(ucophv.stack,recon.v2.stack[[ryr-1999]])#predictor recon surface changes
+            pr.phvrcn.surface=predict(var.stack,mdl.wrecon[[j]][[ryr-1999]],type='response')
+            pr.phvrcn.surface[r==0]=0
+            pr.surface=pr.surface*attr(swe2model$snotel,'scaled:scale')+attr(swe2model$snotel,'scaled:center')
+            pr.phvrcn.surface[pr.phvrcn.surface<0]=0
+            projection(pr.phvrcn.surface)='+proj=longlat +datum=NAD83'
+            pr.phvrcn.surface.stack[[j]]=addLayer(pr.phvrcn.surface.stack[[j]],pr.phvrcn.surface)
           }
           j=j+1
-          if(j%%3==1) j2=1
-          if(j%%3==2) j2=2
-          if(j%%3==0) j2=3
       }
  }
 
